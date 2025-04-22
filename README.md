@@ -1,13 +1,70 @@
-**Database Exam Revision Notes (Based on Provided Exam)**
+**Complete Database Exam Revision Notes**
 
-This guide covers key concepts in Views, User/Role Management, Stored Procedures, Stored Functions, Triggers, and Events, using examples directly from your exam questions.
+**Introduction**
 
-**1. Views**
+This document provides comprehensive revision notes covering key database concepts including views, user/role management, stored procedures, stored functions, triggers, and scheduled events, based on the examples and schemas presented in your exam (`exa3evaGeografia` and `Exa3EvaPizzeria`).
 
-- **Concept:** A view is a virtual table based on the result-set of an SQL query. It doesn't store data itself but provides a named, reusable query structure. Views can simplify complex queries, restrict access to data (show only certain columns/rows), and present data from multiple tables as a single entity.
-- **Creating Views:** Use `CREATE VIEW`. You can optionally specify column names for the view.
-  - **Syntax:** `CREATE VIEW view_name (col1, col2, ...) AS SELECT ...;`
-- **Example (`VLocalidadesVascas` - UD10, Q1):** Create a view showing Basque locality names, populations, and their province names.
+**I. Database Schemas Referenced**
+
+**A. `exa3evaGeografia` Database**
+
+- **`Localidades` (Localities/Towns):**
+  - `id_localidad` (INT PK): Unique ID for the locality.
+  - `nombre` (VARCHAR): Name of the locality (e.g., 'Bilbao').
+  - `poblacion` (BIGINT): Number of inhabitants.
+  - `n_provincia` (INT FK -> Provincias): ID of the province it belongs to.
+- **`Provincias` (Provinces):**
+  - `n_provincia` (INT PK): Unique ID for the province.
+  - `nombre` (VARCHAR): Name of the province (e.g., 'Bizkaia').
+  - `superficie` (DECIMAL): Area in km².
+  - `id_capital` (INT FK -> Localidades): ID of the province's capital city.
+  - `id_comunidad` (INT FK -> Comunidades): ID of the autonomous community it belongs to.
+- **`Comunidades` (Autonomous Communities):**
+  - `id_comunidad` (INT PK): Unique ID for the community.
+  - `nombre` (VARCHAR): Name of the community (e.g., 'País Vasco').
+  - `id_capital` (INT FK -> Localidades): ID of the community's capital city.
+
+**B. `Exa3EvaPizzeria` Database**
+
+- **`Cliente` (Customer):**
+  - `DNI` (VARCHAR PK): Unique ID for the customer.
+  - `nombre`, `direccion`, etc.: Other customer details.
+  - `ultimo_pedido` (TIMESTAMP): Timestamp of the last order.
+  - `num_pedidos` (INT): Total count of orders placed.
+- **`Pedido` (Order):**
+  - `num_pedido` (INT PK): Unique ID for the order.
+  - `fechahora` (TIMESTAMP): Timestamp when the order was placed.
+  - `dni_cliente` (VARCHAR FK -> Cliente): ID of the customer placing the order.
+  - `importe` (DECIMAL): Total cost of the order.
+- **`Pizza`:**
+  - `nom_pizza` (VARCHAR PK): Name/ID of the pizza.
+  - `tiempo_prep` (INT): Preparation time.
+  - `precio` (DECIMAL): Price of the pizza.
+  - `num_pedidos` (INT): Times this pizza has been ordered.
+  - `num_unidades` (INT): Total units of this pizza sold.
+- **`LineaPedido` (Order Line):** (Details inferred)
+  - `num_pedido` (INT FK -> Pedido)
+  - `nom_pizza` (VARCHAR FK -> Pizza)
+  - ... (Likely includes quantity, etc.)
+- **(Assumed for examples) `ActivityLog`:**
+  - `log_id` (INT PK AUTO_INCREMENT)
+  - `log_time` (TIMESTAMP)
+  - `metric_name` (VARCHAR)
+  - `metric_value` (INT or VARCHAR)
+- **(Assumed for examples) `AdminLog`:**
+  - `log_id` (INT PK AUTO_INCREMENT)
+  - `log_time` (TIMESTAMP)
+  - `message` (TEXT)
+
+---
+
+**II. Views**
+
+- **Concept:** A virtual table based on the stored result-set of an SQL query. It doesn't store data itself but provides a named way to look at data derived from one or more tables.
+- **Use Cases:** Simplify complex queries, restrict data access (security), present data logically, achieve data independence.
+- **Syntax:** `CREATE VIEW view_name [(column_list)] AS SELECT_statement;`
+- **Example (`VLocalidadesVascas`):** Show Basque locality names, populations, and province names.
+  - **Tables Used:** `Localidades`, `Provincias`, `Comunidades`
   ```sql
   CREATE VIEW VLocalidadesVascas (NomLoc, PobLoc, NomProv) AS
   SELECT
@@ -23,141 +80,184 @@ This guide covers key concepts in Views, User/Role Management, Stored Procedures
   WHERE
       c.nombre = 'País Vasco'; -- Filter for the specific community
   ```
-- **Key Techniques Used:**
-  - `JOIN`: Combining rows from multiple tables based on related columns (`n_provincia`, `id_comunidad`).
-  - `WHERE`: Filtering results based on a condition (`c.nombre = 'País Vasco'`).
-  - Column Aliasing: Defining specific names for the view's columns (`NomLoc`, `PobLoc`, `NomProv`).
-  - Table Aliasing: Using short names for tables (`l`, `p`, `c`) for readability.
 
-**2. Updating Data Through Views**
+---
 
-- **Concept:** You can sometimes use `UPDATE`, `INSERT`, or `DELETE` statements on a view, which will modify the underlying base table(s). However, this is subject to restrictions. Generally, simple views based on a single table are updatable. Views involving joins might be updatable if the modification unambiguously targets a single base table.
-- **Example (Updating Bilbao's Population - UD10, Q1.1):** Modifying data using the previously created view.
+**III. Updating Data Through Views**
+
+- **Concept:** Modifying data in the underlying base tables by issuing `INSERT`, `UPDATE`, or `DELETE` commands against a view. This is only possible if the view meets certain criteria (e.g., often needs to be based on a single table or the modification must unambiguously target one base table).
+- **Example (Updating Bilbao's Population):**
+  - **View Used:** `VLocalidadesVascas`
+  - **Table Modified:** `Localidades` (column `poblacion`)
   ```sql
   UPDATE VLocalidadesVascas
-  SET PobLoc = 355000
-  WHERE NomLoc = 'Bilbao';
+  SET PobLoc = 355000 -- Sets the 'poblacion' column in the underlying table
+  WHERE NomLoc = 'Bilbao'; -- Identifies the row using the 'nombre' column
   ```
-- **Why it Works (Likely):** The `PobLoc` column in the view directly maps to the `poblacion` column in the `Localidades` table, and the `NomLoc` maps to `nombre` in the same table. The update targets a single row in a single base table.
 
-**3. Roles and Privileges**
+---
 
-- **Concept:** Roles are named collections of privileges. Instead of granting individual permissions to many users, you grant permissions to a role, and then grant the role to users. This simplifies permission management. Privileges define what actions a user/role can perform (e.g., `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE VIEW`, `EXECUTE`).
-- **Creating Roles:**
-  - **Syntax:** `CREATE ROLE role_name;`
-- **Granting Privileges:** Use `GRANT`. Privileges can be granted on different levels (database, table, column).
-  - **Syntax:** `GRANT privilege(s) ON object_level TO role_name;`
-- **Example (`rolexamen` - UD10, Q2):** Create a role for querying all tables, plus INSERT/DELETE/UPDATE(population) on `Localidades`.
+**IV. Roles and Privileges**
+
+- **Concept:**
+  - **Privileges:** Permissions defining what actions can be performed (e.g., `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE VIEW`, `EXECUTE`, `EVENT`).
+  - **Roles:** Named collections of privileges. Users are granted roles, simplifying permission management.
+- **Creating Roles:** `CREATE ROLE role_name;`
+- **Granting Privileges:** `GRANT privilege(s) ON database_object TO role_name | user_name;`
+- **Example (`rolexamen`):** Query any table, plus specific modifications on `Localidades`.
+
+  - **Database:** `exa3evaGeografia`
 
   ```sql
   -- Create the role
   CREATE ROLE rolexamen;
 
-  -- Grant SELECT on all tables in the database (example for specific tables)
+  -- Grant SELECT on all relevant tables in the database
   GRANT SELECT ON exa3evaGeografia.Localidades TO rolexamen;
   GRANT SELECT ON exa3evaGeografia.Provincias TO rolexamen;
   GRANT SELECT ON exa3evaGeografia.Comunidades TO rolexamen;
-  -- Note: GRANT SELECT ON database.* TO role; is a shorthand if supported.
+  -- Note: Shorthand GRANT SELECT ON exa3evaGeografia.* TO rolexamen; might work depending on DBMS/version.
 
   -- Grant specific DML on Localidades
   GRANT INSERT, DELETE ON exa3evaGeografia.Localidades TO rolexamen;
 
-  -- Grant UPDATE only on a specific column
+  -- Grant UPDATE only on the 'poblacion' column of Localidades
   GRANT UPDATE (poblacion) ON exa3evaGeografia.Localidades TO rolexamen;
   ```
 
-- **Example (`rolprueba` Privileges - UD10, Q3.1):** Granting permissions to manage database objects.
+- **Example (`rolprueba` Object Privileges):** Allow creation/modification of procedures, functions, views, indexes, events.
+
+  - **Database:** `exa3evaGeografia`
 
   ```sql
-  -- Grant permissions for procedures/functions
+  -- Assuming rolprueba already exists or CREATE ROLE rolprueba; first
+  -- Grant permissions for procedures/functions (routines)
   GRANT CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON exa3evaGeografia.* TO rolprueba;
 
   -- Grant permission for views
   GRANT CREATE VIEW ON exa3evaGeografia.* TO rolprueba;
 
-  -- Grant permission for indexes
-  GRANT INDEX ON exa3evaGeografia.* TO rolprueba; -- Create/Drop indexes
+  -- Grant permission for indexes (allows CREATE INDEX, DROP INDEX on tables)
+  GRANT INDEX ON exa3evaGeografia.* TO rolprueba;
 
   -- Grant permission for events
-  GRANT EVENT ON exa3evaGeografia.* TO rolprueba; -- Create/Alter/Drop events
+  GRANT EVENT ON exa3evaGeografia.* TO rolprueba;
   ```
 
-  _Note: `ON exa3evaGeografia._` applies the grant to all objects (or potential objects) of that type within the database.\*
+---
 
-**4. User Management**
+**V. User Management**
 
-- **Concept:** Database users are accounts that connect to the database server, usually requiring authentication (password). Users are assigned privileges, often through roles. You can set resource limits and password policies for users.
-- **Creating Users:** Use `CREATE USER`. Specify username, host (where the user can connect from - `localhost`, `%` for any), and password.
-  - **Syntax:** `CREATE USER 'username'@'host' IDENTIFIED BY 'password';`
-- **Setting Policies/Limits:** Add clauses to `CREATE USER` (or use `ALTER USER`).
-  - `WITH MAX_USER_CONNECTIONS count`: Limits simultaneous connections.
-  - `PASSWORD EXPIRE INTERVAL days DAY`: Forces password change after a period.
-- **Assigning Roles:** Use `GRANT`.
-  - **Syntax:** `GRANT role_name TO 'username'@'host';`
-- **Example (`usuexamen` - UD10, Q3):** Create a user with specific limits, policy, and assign `rolprueba`.
+- **Concept:** Creating and managing database user accounts, defining authentication, resource limits, password policies, and assigning privileges (usually via roles).
+- **Creating Users:** `CREATE USER 'username'@'host' IDENTIFIED BY 'password' [options];`
+  - `'host'`: `localhost` (local connections), `%` (any host), specific IP/hostname.
+  - Options (MySQL): `WITH MAX_USER_CONNECTIONS n`, `PASSWORD EXPIRE INTERVAL n DAY`, etc.
+- **Assigning Roles:** `GRANT role_name TO 'username'@'host';`
+- **Example (`usuexamen`):** Create user with limits, expiry, and assign `rolprueba`.
 
   ```sql
+  -- Create the user 'usuexamen' connecting from localhost
   CREATE USER 'usuexamen'@'localhost'
+  -- Set the password
   IDENTIFIED BY 'asgbd'
+  -- Set resource limit: max 3 simultaneous connections
   WITH MAX_USER_CONNECTIONS 3
+  -- Set password policy: expires after 40 days
   PASSWORD EXPIRE INTERVAL 40 DAY;
 
+  -- Grant the 'rolprueba' role (and its associated privileges) to the user
   GRANT rolprueba TO 'usuexamen'@'localhost';
+
+  -- Optional: Make the assigned role the default active role upon login
+  SET DEFAULT ROLE rolprueba TO 'usuexamen'@'localhost';
   ```
 
-**5. Stored Functions**
+---
 
-- **Concept:** A stored function is a named block of SQL code stored in the database that performs a specific calculation or task and **returns a single value**. They are called within SQL expressions.
-- **Creating Functions:** Use `CREATE FUNCTION`. Define input parameters (e.g., `IN param_name TYPE`), the return data type (`RETURNS type`), and the function body within `BEGIN...END`.
-  - `DELIMITER // ... // DELIMITER ;`: Often needed in clients to handle semicolons within the function body.
-  - `DECLARE`: Used to create local variables.
-  - `SELECT ... INTO variable`: Used to assign query results to variables.
-  - `READS SQL DATA` / `DETERMINISTIC` / etc.: Characteristics describing the function's behavior (optional but good practice).
-- **Example (`Densidad` - UD11, Q1):** Calculate population density for a given province.
+**VI. Stored Functions**
+
+- **Concept:** Named, precompiled SQL code block designed to perform a calculation or lookup and **return a single scalar value**. Called within SQL expressions.
+- **Characteristics:** Must `RETURN` a value, primarily `IN` parameters, DML restricted inside queries, can have characteristics (`DETERMINISTIC`, `READS SQL DATA`).
+- **Use Cases:** Reusable calculations, data formatting, encapsulate simple lookups, simplify query expressions.
+- **Syntax:**
+  ```sql
+  DELIMITER //
+  CREATE FUNCTION function_name (param1 type, ...)
+  RETURNS return_type
+  [CHARACTERISTICS]
+  BEGIN
+      -- Declarations
+      -- Logic (IF, SET, SELECT INTO, etc.)
+      RETURN value;
+  END //
+  DELIMITER ;
+  ```
+- **Example (`Densidad`):** Calculate population density.
+
+  - **Database:** `exa3evaGeografia`
 
   ```sql
   DELIMITER //
   CREATE FUNCTION Densidad (nombre_prov VARCHAR(100))
-  RETURNS DECIMAL(10, 2) -- Returns a number like 123.45
-  READS SQL DATA
+  RETURNS DECIMAL(10, 2) -- Return a decimal number
+  READS SQL DATA -- Indicates the function reads data
   BEGIN
       DECLARE total_poblacion BIGINT DEFAULT 0;
       DECLARE superficie_prov DECIMAL(10, 2);
       DECLARE v_n_provincia INT;
 
-      -- Get province ID and area
+      -- Find the province ID and surface area based on the input name
       SELECT n_provincia, superficie INTO v_n_provincia, superficie_prov
-      FROM Provincias WHERE nombre = nombre_prov LIMIT 1;
+      FROM Provincias
+      WHERE nombre = nombre_prov
+      LIMIT 1;
 
-      -- Basic error/edge case handling
+      -- Handle case where province is not found or has zero/null surface area
       IF v_n_provincia IS NULL OR superficie_prov IS NULL OR superficie_prov <= 0 THEN
-          RETURN NULL; -- Or 0.00
+          RETURN NULL; -- Or return 0.00 depending on requirements
       END IF;
 
-      -- Calculate total population (must query Localidades)
-      SELECT SUM(poblacion) INTO total_poblacion
-      FROM Localidades WHERE n_provincia = v_n_provincia;
+      -- Calculate the total population using IFNULL for safety
+      SELECT IFNULL(SUM(poblacion), 0) INTO total_poblacion
+      FROM Localidades
+      WHERE n_provincia = v_n_provincia;
 
-      -- Handle case where SUM might return NULL if no localities
-      IF total_poblacion IS NULL THEN SET total_poblacion = 0; END IF;
-
-      -- Return the calculated density
+      -- Calculate and return the density
       RETURN total_poblacion / superficie_prov;
   END //
   DELIMITER ;
 
   -- How to use it:
-  -- SELECT Densidad('NombreDeProvincia');
+  SELECT nombre, superficie, Densidad(nombre) AS calculated_density
+  FROM Provincias
+  WHERE id_comunidad = 1; -- Example: Assuming 1 is País Vasco's ID
   ```
 
-- **Key Techniques Used:** Parameter input, variable declaration, querying data into variables, aggregate function (`SUM`), conditional logic (`IF`), calculation, returning a value.
+- **Dropping:** `DROP FUNCTION [IF EXISTS] function_name;`
 
-**6. Stored Procedures**
+---
 
-- **Concept:** A stored procedure is a named block of SQL code stored in the database designed to perform a specific action or set of actions. Unlike functions, they don't _have_ to return a single value; they can modify data, perform complex operations, and return result sets (like a standard `SELECT`).
-- **Creating Procedures:** Use `CREATE PROCEDURE`. Define parameters (`IN`, `OUT`, `INOUT`), and the procedure body within `BEGIN...END`.
-- **Calling Procedures:** Use `CALL procedure_name(arguments);`
-- **Example (`ContarProvinciasComunidad` - UD11, Q2):** Count provinces in a community and display a message.
+**VII. Stored Procedures**
+
+- **Concept:** Named, precompiled collection of SQL statements designed to perform an _action_ or _set of actions_. Can take `IN`, `OUT`, `INOUT` parameters, perform DML, manage transactions, and return result sets.
+- **Characteristics:** No mandatory return value (can return result sets via `SELECT`), flexible parameters, can modify data, encapsulate complex logic.
+- **Use Cases:** Encapsulate business logic, security layer, improve performance, reduce network traffic, batch processing, enforce complex rules.
+- **Syntax:**
+  ```sql
+  DELIMITER //
+  CREATE PROCEDURE procedure_name ( [mode] param1 type, ... )
+  [CHARACTERISTICS]
+  BEGIN
+      -- Declarations
+      -- Logic (IF, Loops, DML, SELECT, CALL, etc.)
+      -- Can SELECT data to return to client
+      -- Can SET OUT/INOUT parameters
+  END //
+  DELIMITER ;
+  ```
+- **Example (`ContarProvinciasComunidad`):** Count provinces and display message.
+
+  - **Database:** `exa3evaGeografia`
 
   ```sql
   DELIMITER //
@@ -166,75 +266,191 @@ This guide covers key concepts in Views, User/Role Management, Stored Procedures
       DECLARE prov_count INT;
       DECLARE v_id_comunidad INT;
 
-      -- Get community ID (assumes name exists per NOTE)
-      SELECT id_comunidad INTO v_id_comunidad FROM Comunidades
-      WHERE nombre = nombre_com LIMIT 1;
+      -- Find the ID of the community based on its name
+      SELECT id_comunidad INTO v_id_comunidad
+      FROM Comunidades
+      WHERE nombre = nombre_com
+      LIMIT 1; -- Assuming name is unique or we take the first match
 
-      -- Count provinces
-      SELECT COUNT(*) INTO prov_count FROM Provincias
-      WHERE id_comunidad = v_id_comunidad;
+      -- Handle case where community might not be found
+      IF v_id_comunidad IS NOT NULL THEN
+          SELECT COUNT(*) INTO prov_count
+          FROM Provincias
+          WHERE id_comunidad = v_id_comunidad;
 
-      -- Output message based on count (uses SELECT to display)
-      IF prov_count = 1 THEN
-          SELECT CONCAT(nombre_com, ' es una comunidad autónoma uniprovincial') AS Mensaje;
+          -- Display the appropriate message based on the count
+          IF prov_count = 1 THEN
+              SELECT CONCAT(nombre_com, ' es una comunidad autónoma uniprovincial') AS Mensaje;
+          ELSE
+              SELECT CONCAT('La comunidad ', nombre_com, ' consta de ', prov_count, ' provincias') AS Mensaje;
+          END IF;
       ELSE
-          SELECT CONCAT('La comunidad ', nombre_com, ' consta de ', prov_count, ' provincias') AS Mensaje;
+          SELECT CONCAT('Comunidad Autónoma ''', nombre_com, ''' no encontrada.') AS Mensaje;
       END IF;
   END //
   DELIMITER ;
 
   -- How to call it:
-  -- CALL ContarProvinciasComunidad('Comunidad de Madrid');
-  -- CALL ContarProvinciasComunidad('País Vasco');
+  CALL ContarProvinciasComunidad('País Vasco');
+  CALL ContarProvinciasComunidad('Comunidad de Madrid');
   ```
 
-- **Key Techniques Used:** Input parameter, variable declaration, `SELECT INTO`, aggregate function (`COUNT(*)`), conditional logic (`IF/ELSE`), outputting results via `SELECT`, string concatenation (`CONCAT`).
+- **Example (Procedure with `OUT` Parameter):** Get Province Details.
 
-**7. Triggers**
+  - **Database:** `exa3evaGeografia`
 
-- **Concept:** A trigger is a stored procedure that is automatically executed (fired) by the database server in response to certain Data Manipulation Language (DML) events (`INSERT`, `UPDATE`, `DELETE`) on a specific table. Often used for enforcing complex business rules, auditing changes, or maintaining summary data.
-- **Creating Triggers:** Use `CREATE TRIGGER`. Specify trigger name, timing (`BEFORE` or `AFTER`), event (`INSERT`, `UPDATE`, `DELETE`), table (`ON table_name`), scope (`FOR EACH ROW`), and the trigger body (`BEGIN...END`).
-  - `NEW`: Inside `INSERT` and `UPDATE` triggers, `NEW` refers to the row being inserted or the new version of the row being updated.
-  - `OLD`: Inside `UPDATE` and `DELETE` triggers, `OLD` refers to the old version of the row being updated or the row being deleted.
-- **Example (`InsertarPedido` - UD12, Q1):** Update customer's last order time and order count when a new order is inserted.
+  ```sql
+  DELIMITER //
+  CREATE PROCEDURE GetProvinciaDetails (
+      IN p_nombre_prov VARCHAR(100),
+      OUT p_superficie DECIMAL(10, 2),
+      OUT p_id_comunidad INT,
+      OUT p_found BOOLEAN -- Indicate if found
+  )
+  BEGIN
+      -- Initialize OUT parameters
+      SET p_superficie = NULL;
+      SET p_id_comunidad = NULL;
+      SET p_found = FALSE;
+
+      SELECT superficie, id_comunidad INTO p_superficie, p_id_comunidad
+      FROM Provincias
+      WHERE nombre = p_nombre_prov
+      LIMIT 1;
+
+      -- Check if a row was found (MySQL specific check)
+      IF FOUND_ROWS() > 0 THEN
+          SET p_found = TRUE;
+      END IF;
+  END //
+  DELIMITER ;
+
+  -- How to call it:
+  CALL GetProvinciaDetails('Bizkaia', @sf, @id_c, @fnd);
+  SELECT @sf AS Surface, @id_c AS CommunityID, @fnd AS Found;
+  ```
+
+- **Dropping:** `DROP PROCEDURE [IF EXISTS] procedure_name;`
+
+---
+
+**VIII. Triggers**
+
+- **Concept:** A stored procedure automatically executed by the database in response to a DML event (`INSERT`, `UPDATE`, `DELETE`) on a specific table. Can run `BEFORE` or `AFTER` the event. Uses `NEW` (for inserted/updated row data) and `OLD` (for updated/deleted row data) pseudo-records.
+- **Use Cases:** Auditing changes, enforcing complex business rules, maintaining summary/derived data, preventing invalid operations.
+- **Syntax:**
+  ```sql
+  DELIMITER //
+  CREATE TRIGGER trigger_name
+  {BEFORE | AFTER} {INSERT | UPDATE | DELETE}
+  ON table_name
+  FOR EACH ROW -- Usually required for row-level actions
+  BEGIN
+      -- Trigger logic using NEW and OLD
+  END //
+  DELIMITER ;
+  ```
+- **Example (`InsertarPedido`):** Update customer stats on new order.
+  - **Database:** `Exa3EvaPizzeria`
+  - **Triggering Table/Event:** `AFTER INSERT ON Pedido`
+  - **Action Table:** `Cliente`
   ```sql
   DELIMITER //
   CREATE TRIGGER InsertarPedido
-  AFTER INSERT ON Pedido -- Fires AFTER an INSERT on Pedido table
-  FOR EACH ROW -- Executes once per inserted row
+  AFTER INSERT ON Pedido -- Trigger fires after a row is inserted into Pedido
+  FOR EACH ROW -- The trigger logic executes for each inserted row
   BEGIN
-      -- Update the Cliente table for the customer who placed the order
+      -- Update the Cliente table based on the DNI from the newly inserted Pedido row
       UPDATE Cliente
       SET
-          ultimo_pedido = NEW.fechahora,  -- Use the timestamp from the new order
-          num_pedidos = num_pedidos + 1   -- Increment the count
+          ultimo_pedido = NEW.fechahora, -- Set last order time to the new order's time
+          num_pedidos = num_pedidos + 1  -- Increment the order count
       WHERE
-          DNI = NEW.dni_cliente;          -- Match the customer using the DNI from the new order
+          DNI = NEW.dni_cliente; -- Update the specific client who placed the order
   END //
   DELIMITER ;
   ```
-- **Key Techniques Used:** Trigger timing/event (`AFTER INSERT`), scope (`FOR EACH ROW`), accessing newly inserted data (`NEW.fechahora`, `NEW.dni_cliente`), performing DML (`UPDATE`) within the trigger body to maintain related data.
+- **Dropping:** `DROP TRIGGER [IF EXISTS] trigger_name;`
 
-**8. Events (Scheduled Events)**
+---
 
-- **Concept:** An event is a task or block of SQL code that the database server executes automatically based on a predefined schedule. Useful for periodic maintenance, generating reports, archiving data, or running summary calculations at specific times.
-- **Creating Events:** Use `CREATE EVENT`. Specify event name, schedule (`ON SCHEDULE`), frequency (`EVERY interval`), start time (`STARTS timestamp`), whether it persists (`ON COMPLETION PRESERVE`), and the action (`DO ...`).
-  - The event scheduler must be enabled on the server (e.g., `SET GLOBAL event_scheduler = ON;` in MySQL).
-- **Example (`RegistrarGastoClienteEvento` - UD12, Q2):** Call a (fictional) procedure at the end of every year.
+**IX. Events (Scheduled Events)**
+
+- **Concept:** A task (SQL statement or procedure call) executed automatically by the database server based on a predefined schedule. Requires the server's event scheduler to be enabled (`event_scheduler=ON` in MySQL).
+- **Characteristics:** Scheduled execution (one-time or recurring), automatic, requires `EVENT` privilege.
+- **Use Cases:** Automated maintenance, data archiving, report generation support, data aggregation, periodic cleanup.
+- **Syntax:**
   ```sql
-  -- Assumes event_scheduler is ON
+  DELIMITER //
+  CREATE EVENT event_name
+  ON SCHEDULE schedule_definition -- AT timestamp | EVERY interval [STARTS/ENDS]
+  [ON COMPLETION PRESERVE] -- Keep for recurring events
+  [ENABLE | DISABLE]
+  [COMMENT 'description']
+  DO
+  event_body; -- Single statement or BEGIN...END block
+  DELIMITER ;
+  ```
+- **Example (`RegistrarGastoClienteEvento`):** Call procedure annually.
+  - **Database:** `Exa3EvaPizzeria` (indirectly via procedure call)
+  ```sql
+  -- Ensure scheduler is ON: SET GLOBAL event_scheduler = ON; (needs privileges)
   DELIMITER //
   CREATE EVENT RegistrarGastoClienteEvento
   ON SCHEDULE
-      EVERY 1 YEAR -- Frequency: once per year
-      -- Calculate the start time: Dec 31st, 23:59:59 of the current year
-      STARTS STR_TO_DATE(CONCAT(YEAR(CURDATE()), '-12-31 23:59:59'), '%Y-%m-%d %H:%i:%s')
-      ON COMPLETION PRESERVE -- Keep the event for future runs
+      -- Execute every 1 year
+      EVERY 1 YEAR
+      -- Start at the end of the current year (using LAST_DAY is robust)
+      STARTS DATE_FORMAT(LAST_DAY(CONCAT(YEAR(CURDATE()),'-12-01')), '%Y-%m-%d 23:59:59')
+  ON COMPLETION PRESERVE -- Keep the event for future runs
+  ENABLE -- Ensure the event is active
+  COMMENT 'Calls RegistrarGastoCliente procedure annually at year end.'
   DO
   BEGIN
-      -- The task to perform: call the procedure
+      -- Call the fictional procedure mentioned in the exam
       CALL RegistrarGastoCliente();
+      -- Optional: Add logging
+      -- INSERT INTO AdminLog (message) VALUES ('Executed RegistrarGastoClienteEvento');
   END //
   DELIMITER ;
   ```
-- **Key Techniques Used:** Defining schedule (`EVERY`, `STARTS`), calculating dynamic start time (`YEAR`, `CURDATE`, `CONCAT`, `STR_TO_DATE`), ensuring recurrence (`ON COMPLETION PRESERVE`), defining the action (`DO CALL ...`).
+- **Example (Recurring Log Event):** Log active customer count hourly.
+
+  - **Database:** `Exa3EvaPizzeria` (`Cliente`), `ActivityLog`
+
+  ```sql
+  /* -- Required table setup for this example:
+  CREATE TABLE ActivityLog (
+      log_id INT AUTO_INCREMENT PRIMARY KEY,
+      log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      metric_name VARCHAR(50),
+      metric_value INT
+  );
+  */
+  DELIMITER //
+  CREATE EVENT LogActiveCustomersHourly
+  ON SCHEDULE
+      EVERY 1 HOUR
+      STARTS CURRENT_TIMESTAMP -- Start roughly on the next hour
+  ON COMPLETION PRESERVE
+  ENABLE
+  COMMENT 'Logs the count of customers with recent orders hourly.'
+  DO
+  BEGIN
+      DECLARE active_customer_count INT;
+
+      -- Define 'active' as ordered in the last 30 days
+      SELECT COUNT(*) INTO active_customer_count
+      FROM Cliente
+      WHERE ultimo_pedido >= NOW() - INTERVAL 30 DAY;
+
+      INSERT INTO ActivityLog (metric_name, metric_value)
+      VALUES ('ActiveCustomers', active_customer_count);
+  END //
+  DELIMITER ;
+  ```
+
+- **Managing Events:**
+  - `SHOW EVENTS;`
+  - `DROP EVENT [IF EXISTS] event_name;`
+  - `ALTER EVENT event_name [DISABLE | ENABLE | ON SCHEDULE ... | RENAME TO ... | DO ...];`
